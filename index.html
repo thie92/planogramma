@@ -74,6 +74,16 @@ h2{font-family:var(--font-display);font-weight:700;text-transform:uppercase;lett
 .between{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .chip{min-width:56px}
 .chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.map{overflow-x:auto;border:1px solid var(--line);background:var(--surface-2);border-radius:2px;-webkit-overflow-scrolling:touch}
+.map svg{display:block;width:100%;height:auto}
+.map.zoom svg{width:220%}
+.map text{fill:var(--muted)}
+.map .el{fill:var(--surface);stroke:var(--muted);stroke-width:.8;cursor:pointer}
+.map .el.has{fill:var(--hl)}
+.map .el.sel{fill:var(--accent);stroke:var(--ink);stroke-width:2}
+.map .lbl{font-size:6.5px;fill:var(--ink);pointer-events:none;font-family:var(--font-body)}
+.nav{font-size:22px;min-width:48px}
+select{font:inherit;color:inherit;border:1px solid var(--line);background:var(--surface-2);border-radius:2px;min-height:44px;padding:0 10px;width:100%}
 .nums{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
 .nums button{padding:0;min-height:42px;font-variant-numeric:tabular-nums;font-size:15px}
 .nums button.has{box-shadow:inset 0 -4px 0 var(--accent)}
@@ -138,7 +148,7 @@ input{border:1px solid var(--line);background:var(--surface-2);border-radius:2px
 <section class="card" id="settings" hidden>
   <h2>Negozio e data del layout</h2>
   <div class="row">
-    <div class="field"><label for="in-store">StoreID</label><input id="in-store" autocomplete="off" value="IT06"></div>
+    <div class="field" style="flex:2"><label>Negozio</label><div class="row" role="group" aria-label="Negozio" id="stores"></div></div>
     <div class="field"><label for="in-date">Valido dal</label><input id="in-date" type="date"></div>
   </div>
   <p class="note">Ogni coppia negozio + data è una versione del planogramma. Per un nuovo layout scegli una data nuova: le versioni precedenti restano salvate su questo telefono.</p>
@@ -147,10 +157,15 @@ input{border:1px solid var(--line);background:var(--surface-2);border-radius:2px
 
 <section class="card" aria-labelledby="h-sup">
   <h2 id="h-sup">Supporto</h2>
-  <div class="row" role="group" aria-label="Area" id="areas"></div>
-  <div class="row" role="group" aria-label="Tipo" id="types"></div>
-  <div class="nums" role="group" aria-label="Numero" id="nums"></div>
-  <div class="current" id="current">Area 1 · Wall 1</div>
+  <p class="note" id="map-note">Tocca il modulo sulla piantina.</p>
+  <div class="map" id="map"></div>
+  <div class="between">
+    <button type="button" class="nav" id="prev" aria-label="Supporto precedente">‹</button>
+    <div class="current" id="current" style="text-align:center;flex:1">…</div>
+    <button type="button" class="nav" id="next" aria-label="Supporto successivo">›</button>
+  </div>
+  <div class="row" role="group" aria-label="Livello" id="levels"></div>
+  <div class="between"><select id="sel-sup" aria-label="Scegli il supporto dall'elenco"></select><button type="button" class="ghost" id="btn-zoom">Zoom</button></div>
 </section>
 
 <section class="card scanner" id="scanner" aria-labelledby="h-scan">
@@ -194,8 +209,11 @@ input{border:1px solid var(--line);background:var(--surface-2);border-radius:2px
 (function(){
 'use strict';
 var $ = function(id){ return document.getElementById(id); };
-var TYPES = {Wall:30, Table:10, Gondola:10};
-var AREAS = [1,2,3];
+var LAYOUTS = [{"id":"IT04","nome":"Aosta","viewBox":"0 0 680 225","bg":"<polygon points='4.0,106.8 114.5,108.4 113.2,14.1 393.0,40.1 390.8,120.4 466.2,120.4 468.8,41.8 652.4,59.6 644.9,209.1 4.0,209.1' fill='none' stroke='#888780' stroke-width='1.5'/><rect x='342.0' y='51.5' width='32.5' height='84.5' fill='none' stroke='#B4B2A9' stroke-dasharray='4 3'/><text x='358.2' y='96.8' font-size='8' fill='#5F5E5A' text-anchor='middle'>Scala</text><rect x='158.4' y='72.6' width='22.8' height='52.0' fill='none' stroke='#B4B2A9' stroke-dasharray='4 3'/><text x='169.8' y='101.6' font-size='8' fill='#5F5E5A' text-anchor='middle'>Cassa</text><rect x='49.5' y='160.4' width='66.6' height='39.0' fill='none' stroke='#B4B2A9' stroke-dasharray='4 3'/><text x='82.8' y='182.9' font-size='8' fill='#5F5E5A' text-anchor='middle'>Camerini</text><rect x='249.9' y='178.2' width='9.4' height='8.1' fill='none' stroke='#888780'/><rect x='398.5' y='178.2' width='9.4' height='8.1' fill='none' stroke='#888780'/><rect x='502.4' y='178.2' width='9.4' height='8.1' fill='none' stroke='#888780'/><line x1='631.2' y1='175.0' x2='631.2' y2='204.2' stroke='#888780' stroke-width='3'/><text x='631.2' y='221.1' font-size='8' fill='#5F5E5A' text-anchor='middle'>Porta</text><line x1='403.1' y1='123.0' x2='403.1' y2='209.1' stroke='#888780' stroke-dasharray='6 4'/><text x='511.0' y='158.8' font-size='10' font-weight='bold' fill='#2C2C2A' text-anchor='middle'>Area 1</text><text x='277.0' y='136.0' font-size='10' font-weight='bold' fill='#2C2C2A' text-anchor='middle'>Area 2</text>","note":"Piano terra. Primo piano (area 3) da aggiungere.","el":[{"s":"Wall 1","t":"Wall","a":2,"sh":{"type":"rect","x":136.6,"y":175.0,"w":20.4,"h":14.6},"l":[146.8,198.6]},{"s":"Wall 2","t":"Wall","a":2,"sh":{"type":"rect","x":158.9,"y":175.0,"w":20.4,"h":14.6},"l":[169.1,198.6]},{"s":"Wall 3","t":"Wall","a":2,"sh":{"type":"rect","x":181.3,"y":175.0,"w":20.4,"h":14.6},"l":[191.5,198.6]},{"s":"Wall 4","t":"Wall","a":2,"sh":{"type":"rect","x":203.6,"y":175.0,"w":20.4,"h":14.6},"l":[213.8,198.6]},{"s":"Wall 5","t":"Wall","a":2,"sh":{"type":"rect","x":225.9,"y":175.0,"w":20.4,"h":14.6},"l":[236.1,198.6]},{"s":"Wall 6","t":"Wall","a":2,"sh":{"type":"rect","x":262.9,"y":175.0,"w":20.4,"h":14.6},"l":[273.1,198.6]},{"s":"Wall 7","t":"Wall","a":2,"sh":{"type":"rect","x":285.2,"y":175.0,"w":20.4,"h":14.6},"l":[295.4,198.6]},{"s":"Wall 8","t":"Wall","a":2,"sh":{"type":"rect","x":307.5,"y":175.0,"w":20.4,"h":14.6},"l":[317.7,198.6]},{"s":"Wall 9","t":"Wall","a":2,"sh":{"type":"rect","x":329.8,"y":175.0,"w":20.4,"h":14.6},"l":[340.0,198.6]},{"s":"Wall 10","t":"Wall","a":2,"sh":{"type":"rect","x":352.2,"y":175.0,"w":20.4,"h":14.6},"l":[362.4,198.6]},{"s":"Wall 11","t":"Wall","a":2,"sh":{"type":"rect","x":374.5,"y":175.0,"w":20.4,"h":14.6},"l":[384.7,198.6]},{"s":"Wall 12","t":"Wall","a":1,"sh":{"type":"rect","x":411.5,"y":175.0,"w":20.4,"h":14.6},"l":[421.7,198.6]},{"s":"Wall 13","t":"Wall","a":1,"sh":{"type":"rect","x":433.8,"y":175.0,"w":20.4,"h":14.6},"l":[444.0,198.6]},{"s":"Wall 14","t":"Wall","a":1,"sh":{"type":"rect","x":456.1,"y":175.0,"w":20.4,"h":14.6},"l":[466.3,198.6]},{"s":"Wall 15","t":"Wall","a":1,"sh":{"type":"rect","x":478.4,"y":175.0,"w":20.4,"h":14.6},"l":[488.6,198.6]},{"s":"Wall 16","t":"Wall","a":1,"sh":{"type":"rect","x":515.4,"y":175.0,"w":20.4,"h":14.6},"l":[525.6,198.6]},{"s":"Wall 17","t":"Wall","a":1,"sh":{"type":"rect","x":537.7,"y":175.0,"w":20.4,"h":14.6},"l":[547.9,198.6]},{"s":"Wall 18","t":"Wall","a":1,"sh":{"type":"rect","x":560.0,"y":175.0,"w":20.4,"h":14.6},"l":[570.2,198.6]},{"s":"Wall 19","t":"Wall","a":1,"sh":{"type":"rect","x":582.4,"y":175.0,"w":20.4,"h":14.6},"l":[592.6,198.6]},{"s":"Wall 20","t":"Wall","a":1,"sh":{"type":"rect","x":607.9,"y":66.1,"w":25.7,"h":10.4},"l":[620.7,63.1]},{"s":"Wall 21","t":"Wall","a":1,"sh":{"type":"rect","x":580.2,"y":66.1,"w":25.7,"h":10.4},"l":[593.0,63.1]},{"s":"Wall 22","t":"Wall","a":1,"sh":{"type":"rect","x":552.6,"y":66.1,"w":25.7,"h":10.4},"l":[565.4,63.1]},{"s":"Wall 23","t":"Wall","a":1,"sh":{"type":"rect","x":525.0,"y":66.1,"w":25.7,"h":10.4},"l":[537.8,63.1]},{"s":"Wall 24","t":"Wall","a":1,"sh":{"type":"rect","x":485.7,"y":72.0,"w":16.2,"h":19.2},"l":[482.7,84.6]},{"s":"Wall 25","t":"Wall","a":1,"sh":{"type":"rect","x":485.7,"y":93.1,"w":16.2,"h":19.2},"l":[482.7,105.7]},{"s":"Wall 26","t":"Wall","a":1,"sh":{"type":"rect","x":485.7,"y":114.2,"w":16.2,"h":19.2},"l":[482.7,126.8]},{"s":"Wall 27","t":"Wall","a":2,"sh":{"type":"polygon","points":[[213.6,39.8],[291.3,47.9],[291.3,55.1],[213.6,47.0]]},"l":[252.4,41.7]},{"s":"Wall 28","t":"Wall","a":2,"sh":{"type":"polygon","points":[[134.0,31.4],[211.7,39.5],[211.7,46.6],[134.0,38.5]]},"l":[172.8,33.2]},{"s":"Table 1","t":"Table","a":1,"sh":{"type":"rect","x":520.8,"y":90.5,"w":35.8,"h":29.2},"l":[538.6,108.1]},{"s":"Gondola 1","t":"Gondola","a":2,"sh":{"type":"rect","x":186.0,"y":72.6,"w":35.8,"h":13.7},"l":[203.9,82.5]},{"s":"Gondola 2","t":"Gondola","a":2,"sh":{"type":"rect","x":238.0,"y":78.2,"w":35.8,"h":13.7},"l":[255.9,88.0]}]},{"id":"IT06","nome":"Genova","viewBox":"0 0 680 400","bg":"<rect x='493.7' y='34.5' width='132.7' height='218.9' fill='none' stroke='#888780' stroke-width='1.2'/><text x='495.7' y='30.5' font-size='9' font-weight='bold' fill='#2C2C2A'>A · Area 1</text><rect x='349.3' y='148.6' width='125.8' height='131.4' fill='none' stroke='#888780' stroke-width='1.2'/><text x='351.3' y='144.6' font-size='9' font-weight='bold' fill='#2C2C2A'>B · Area 2</text><rect x='195.5' y='148.6' width='141.4' height='131.4' fill='none' stroke='#888780' stroke-width='1.2'/><text x='197.5' y='144.6' font-size='9' font-weight='bold' fill='#2C2C2A'>C · Area 2</text><rect x='43.0' y='275.7' width='133.3' height='103.5' fill='none' stroke='#888780' stroke-width='1.2'/><text x='45.0' y='271.7' font-size='9' font-weight='bold' fill='#2C2C2A'>D · Area 3</text><rect x='43.0' y='147.4' width='133.3' height='117.8' fill='none' stroke='#888780' stroke-width='1.2'/><text x='45.0' y='143.4' font-size='9' font-weight='bold' fill='#2C2C2A'>E · Area 3</text><rect x='42.4' y='30.8' width='98.6' height='99.2' fill='none' stroke='#888780' stroke-width='1.2'/><text x='44.4' y='26.8' font-size='9' font-weight='bold' fill='#2C2C2A'>F · Area 3</text><rect x='418.1' y='27.7' width='58.9' height='99.2' fill='none' stroke='#B4B2A9' stroke-dasharray='4 3'/><text x='447.6' y='80.3' font-size='8' fill='#5F5E5A' text-anchor='middle'>Magazzino</text><rect x='194.9' y='27.7' width='52.7' height='99.2' fill='none' stroke='#B4B2A9' stroke-dasharray='4 3'/><text x='221.2' y='80.3' font-size='8' fill='#5F5E5A' text-anchor='middle'>Locale tecnico</text><line x1='653.7' y1='192.0' x2='632.0' y2='192.0' stroke='#888780' stroke-width='1.5'/><polygon points='632.0,192.0 638.0,188.0 638.0,196.0' fill='#888780'/><text x='653.7' y='184.0' font-size='8' fill='#5F5E5A' text-anchor='end'>Ingresso</text>","note":"Planimetria 2019, moduli contati dal disegno.","el":[{"s":"Wall 1","t":"Wall","a":1,"sh":{"type":"rect","x":602.4,"y":237.9,"w":23.4,"h":15.5},"l":[614.1,248.7]},{"s":"Wall 2","t":"Wall","a":1,"sh":{"type":"rect","x":577.8,"y":237.9,"w":23.4,"h":15.5},"l":[589.5,248.7]},{"s":"Wall 3","t":"Wall","a":1,"sh":{"type":"rect","x":553.1,"y":237.9,"w":23.4,"h":15.5},"l":[564.8,248.7]},{"s":"Wall 4","t":"Wall","a":1,"sh":{"type":"rect","x":528.5,"y":237.9,"w":23.4,"h":15.5},"l":[540.2,248.7]},{"s":"Wall 5","t":"Wall","a":1,"sh":{"type":"rect","x":496.2,"y":245.9,"w":29.2,"h":7.5},"l":[510.8,252.7]},{"s":"Wall 6","t":"Wall","a":2,"sh":{"type":"rect","x":445.9,"y":258.3,"w":20.6,"h":20.5},"l":[456.2,271.6]},{"s":"Wall 7","t":"Wall","a":2,"sh":{"type":"rect","x":424.1,"y":258.3,"w":20.5,"h":20.5},"l":[434.4,271.6]},{"s":"Wall 8","t":"Wall","a":2,"sh":{"type":"rect","x":402.2,"y":258.3,"w":20.6,"h":20.5},"l":[412.5,271.6]},{"s":"Wall 9","t":"Wall","a":2,"sh":{"type":"rect","x":380.4,"y":258.3,"w":20.6,"h":20.5},"l":[390.7,271.6]},{"s":"Wall 10","t":"Wall","a":2,"sh":{"type":"rect","x":358.6,"y":258.3,"w":20.6,"h":20.5},"l":[368.9,271.6]},{"s":"Wall 11","t":"Wall","a":2,"sh":{"type":"rect","x":303.3,"y":258.3,"w":23.0,"h":20.5},"l":[314.8,271.6]},{"s":"Wall 12","t":"Wall","a":2,"sh":{"type":"rect","x":279.0,"y":258.3,"w":23.0,"h":20.5},"l":[290.5,271.6]},{"s":"Wall 13","t":"Wall","a":2,"sh":{"type":"rect","x":254.7,"y":258.3,"w":23.0,"h":20.5},"l":[266.2,271.6]},{"s":"Wall 14","t":"Wall","a":2,"sh":{"type":"rect","x":230.4,"y":258.3,"w":23.0,"h":20.5},"l":[241.9,271.6]},{"s":"Wall 15","t":"Wall","a":2,"sh":{"type":"rect","x":206.1,"y":258.3,"w":23.0,"h":20.5},"l":[217.6,271.6]},{"s":"Wall 16","t":"Wall","a":3,"sh":{"type":"rect","x":155.2,"y":286.9,"w":20.5,"h":22.9},"l":[165.4,301.3]},{"s":"Wall 17","t":"Wall","a":3,"sh":{"type":"rect","x":155.2,"y":311.0,"w":20.5,"h":23.0},"l":[165.4,325.5]},{"s":"Wall 18","t":"Wall","a":3,"sh":{"type":"rect","x":155.2,"y":335.2,"w":20.5,"h":23.0},"l":[165.4,349.7]},{"s":"Wall 19","t":"Wall","a":3,"sh":{"type":"rect","x":134.4,"y":358.8,"w":20.2,"h":21.7},"l":[144.5,372.7]},{"s":"Wall 20","t":"Wall","a":3,"sh":{"type":"rect","x":112.9,"y":358.8,"w":20.2,"h":21.7},"l":[123.0,372.7]},{"s":"Wall 21","t":"Wall","a":3,"sh":{"type":"rect","x":91.5,"y":358.8,"w":20.2,"h":21.7},"l":[101.6,372.7]},{"s":"Wall 22","t":"Wall","a":3,"sh":{"type":"rect","x":70.0,"y":358.8,"w":20.2,"h":21.7},"l":[80.1,372.7]},{"s":"Wall 23","t":"Wall","a":3,"sh":{"type":"rect","x":48.6,"y":358.8,"w":20.2,"h":21.7},"l":[58.7,372.7]},{"s":"Wall 24","t":"Wall","a":3,"sh":{"type":"rect","x":43.6,"y":280.7,"w":18.6,"h":24.1},"l":[52.9,295.8]},{"s":"Wall 25","t":"Wall","a":3,"sh":{"type":"rect","x":42.4,"y":228.0,"w":6.8,"h":35.3},"l":[45.8,248.7]},{"s":"Wall 26","t":"Wall","a":3,"sh":{"type":"rect","x":42.4,"y":191.4,"w":6.8,"h":35.3},"l":[45.8,212.1]},{"s":"Wall 27","t":"Wall","a":3,"sh":{"type":"rect","x":42.4,"y":154.8,"w":6.8,"h":35.3},"l":[45.8,175.5]},{"s":"Wall 28","t":"Wall","a":3,"sh":{"type":"rect","x":43.6,"y":91.6,"w":21.1,"h":22.9},"l":[54.2,106.0]},{"s":"Wall 29","t":"Wall","a":3,"sh":{"type":"rect","x":61.0,"y":34.5,"w":11.1,"h":11.2},"l":[66.5,43.1]},{"s":"Wall 30","t":"Wall","a":3,"sh":{"type":"rect","x":73.4,"y":34.5,"w":11.1,"h":11.2},"l":[79.0,43.1]},{"s":"Wall 31","t":"Wall","a":3,"sh":{"type":"rect","x":85.8,"y":34.5,"w":11.1,"h":11.2},"l":[91.3,43.1]},{"s":"Wall 32","t":"Wall","a":3,"sh":{"type":"rect","x":98.2,"y":34.5,"w":11.1,"h":11.2},"l":[103.8,43.1]},{"s":"Wall 33","t":"Wall","a":3,"sh":{"type":"rect","x":110.6,"y":34.5,"w":11.1,"h":11.2},"l":[116.1,43.1]},{"s":"Wall 34","t":"Wall","a":3,"sh":{"type":"rect","x":123.0,"y":34.5,"w":11.1,"h":11.2},"l":[128.6,43.1]},{"s":"Wall 35","t":"Wall","a":3,"sh":{"type":"rect","x":129.8,"y":59.9,"w":9.3,"h":35.4},"l":[134.5,80.6]},{"s":"Wall 36","t":"Wall","a":2,"sh":{"type":"rect","x":206.1,"y":149.8,"w":23.0,"h":20.5},"l":[217.6,163.1]},{"s":"Wall 37","t":"Wall","a":2,"sh":{"type":"rect","x":230.4,"y":149.8,"w":23.0,"h":20.5},"l":[241.9,163.1]},{"s":"Wall 38","t":"Wall","a":2,"sh":{"type":"rect","x":254.7,"y":149.8,"w":23.0,"h":20.5},"l":[266.2,163.1]},{"s":"Wall 39","t":"Wall","a":2,"sh":{"type":"rect","x":279.0,"y":149.8,"w":23.0,"h":20.5},"l":[290.5,163.1]},{"s":"Wall 40","t":"Wall","a":2,"sh":{"type":"rect","x":303.3,"y":149.8,"w":23.0,"h":20.5},"l":[314.8,163.1]},{"s":"Wall 41","t":"Wall","a":2,"sh":{"type":"rect","x":358.6,"y":148.0,"w":22.7,"h":8.7},"l":[370.0,155.3]},{"s":"Wall 42","t":"Wall","a":2,"sh":{"type":"rect","x":382.6,"y":148.0,"w":22.7,"h":8.7},"l":[394.0,155.3]},{"s":"Wall 43","t":"Wall","a":2,"sh":{"type":"rect","x":406.5,"y":148.0,"w":22.8,"h":8.7},"l":[417.9,155.3]},{"s":"Wall 44","t":"Wall","a":1,"sh":{"type":"rect","x":494.4,"y":65.8,"w":6.2,"h":20.2},"l":[497.5,78.9]},{"s":"Wall 45","t":"Wall","a":1,"sh":{"type":"rect","x":494.4,"y":44.4,"w":6.2,"h":20.2},"l":[497.5,57.5]},{"s":"Wall 46","t":"Wall","a":1,"sh":{"type":"rect","x":502.4,"y":35.8,"w":21.3,"h":6.8},"l":[513.0,42.2]},{"s":"Wall 47","t":"Wall","a":1,"sh":{"type":"rect","x":524.9,"y":35.8,"w":21.2,"h":6.8},"l":[535.5,42.2]},{"s":"Wall 48","t":"Wall","a":1,"sh":{"type":"rect","x":547.4,"y":35.8,"w":21.2,"h":6.8},"l":[558.0,42.2]},{"s":"Wall 49","t":"Wall","a":1,"sh":{"type":"rect","x":569.8,"y":35.8,"w":21.3,"h":6.8},"l":[580.4,42.2]},{"s":"Table 1","t":"Table","a":3,"sh":{"type":"rect","x":100.0,"y":295.5,"w":18.6,"h":33.5},"l":[109.3,315.2]},{"s":"Table 2","t":"Table","a":3,"sh":{"type":"rect","x":67.8,"y":172.8,"w":27.9,"h":75.6},"l":[81.8,213.6]},{"s":"Table 3","t":"Table","a":1,"sh":{"type":"rect","x":596.7,"y":42.6,"w":29.7,"h":67.6},"l":[611.6,79.4]},{"s":"Gondola 1","t":"Gondola","a":2,"sh":{"type":"rect","x":216.6,"y":204.4,"w":80.6,"h":18.6},"l":[256.9,216.7]},{"s":"Table 4","t":"Table","a":1,"sh":{"type":"circle","cx":571.9,"cy":76.7,"r":6},"l":[571.9,79.7]},{"s":"Table 5","t":"Table","a":1,"sh":{"type":"circle","cx":578.1,"cy":59.9,"r":6},"l":[578.1,62.9]}]}];
+function layout(){ return LAYOUTS.filter(function(x){ return x.id===state.store; })[0] || LAYOUTS[0]; }
+function elems(){ return layout().el; }
+function curEl(){ var a=elems(); return a.filter(function(e){ return e.s===state.sup; })[0] || a[0]; }
+function isWall(e){ return e.t==='Wall'; }
 var ls = {
   get:function(k,d){ try{ var v=localStorage.getItem(k); return v==null?d:JSON.parse(v); }catch(e){ return d; } },
   set:function(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); return true; }catch(e){ return false; } }
@@ -204,10 +222,13 @@ function today(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth
 function itDate(iso){ return iso ? iso.split('-').reverse().join('/') : ''; }
 function esc(s){ return String(s).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
 
-var state = Object.assign({store:'IT06', date:today(), area:1, type:'Wall', num:1}, ls.get('planogramma:sel',{}));
+var state = Object.assign({store:'IT06', date:today(), sup:'Wall 1', level:'Alto'}, ls.get('planogramma:sel2',{}));
+if(!LAYOUTS.some(function(x){ return x.id===state.store; })) state.store = LAYOUTS[0].id;
 if(!state.date) state.date = today();
 function versionKey(){ return (state.store||'X').replace(/[^A-Za-z0-9-]/g,'')+'_'+state.date; }
-function expoName(){ return state.type+' '+state.num; }
+function expoName(){ var e=curEl(); return isWall(e) ? e.s+' '+state.level : e.s; }
+function curArea(){ return curEl().a; }
+function curLabel(){ return 'Area '+curArea()+' · '+expoName(); }
 function getScans(){ return ls.get('planogramma:scans:'+versionKey(), []); }
 function putScans(a){ if(!ls.set('planogramma:scans:'+versionKey(), a)) showStatus('warn','Memoria del telefono piena: salva l\'Excel ed elimina le versioni vecchie.'); }
 function getVersions(){ return ls.get('planogramma:versions', []); }
@@ -218,7 +239,7 @@ function ensureVersion(){
   if(!v.some(function(x){ return x.key===key; })){ v.push({key:key, store:state.store, validoDal:state.date}); ls.set('planogramma:versions', v); renderVersions(); }
 }
 function addScan(ean){
-  var rec = {id:'s'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), ean:ean, area:state.area, expo:expoName(), store:state.store, validoDal:state.date, ts:Date.now()};
+  var rec = {id:'s'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), ean:ean, area:curArea(), expo:expoName(), store:state.store, validoDal:state.date, ts:Date.now()};
   scans = getScans(); scans.push(rec); putScans(scans); ensureVersion(); render(); return rec.id;
 }
 function removeScan(id){ scans = getScans().filter(function(s){ return s.id!==id; }); putScans(scans); render(); }
@@ -257,7 +278,7 @@ function addCodes(codes){
   var ids=[], bad=[];
   codes.forEach(function(c){ if(!checkOk(c)) bad.push(c); ids.push(addScan(c)); });
   beep();
-  var where='Area '+state.area+' · '+expoName();
+  var where=curLabel();
   if(bad.length) showStatus('warn','Aggiunto '+codes.join(', ')+' su '+where+', ma la cifra di controllo non torna: verifica il codice.', ids);
   else showStatus('ok',(codes.length>1?codes.length+' codici aggiunti':'Aggiunto '+codes[0])+' su '+where+'.', ids);
 }
@@ -361,23 +382,53 @@ function drawContours(){
   svg.innerHTML=h;
 }
 function chip(label, pressed, attr){ return '<button type="button" class="chip" aria-pressed="'+pressed+'" '+attr+'>'+label+'</button>'; }
+var mapStore = null;
+function shapeSvg(e){
+  var h=e.sh, a=' class="el" data-sup="'+esc(e.s)+'"';
+  if(h.type==='rect') return '<rect'+a+' x="'+h.x+'" y="'+h.y+'" width="'+h.w+'" height="'+h.h+'" rx="1.5"/>';
+  if(h.type==='circle') return '<circle'+a+' cx="'+h.cx+'" cy="'+h.cy+'" r="'+h.r+'"/>';
+  return '<polygon'+a+' points="'+h.points.map(function(p){ return p[0]+','+p[1]; }).join(' ')+'"/>';
+}
+function shortName(e){ var p=e.s.split(' '); return e.t==='Wall' ? p[1] : p[0].charAt(0)+p[1]; }
+function buildMap(){
+  var L=layout();
+  var h='<svg viewBox="'+L.viewBox+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Piantina di '+esc(L.nome)+'">'+L.bg;
+  L.el.forEach(function(e){ h+=shapeSvg(e); });
+  L.el.forEach(function(e){ h+='<text class="lbl" x="'+e.l[0]+'" y="'+e.l[1]+'" text-anchor="middle">'+shortName(e)+'</text>'; });
+  $('map').innerHTML=h+'</svg>';
+  $('sel-sup').innerHTML=L.el.map(function(e){ return '<option value="'+esc(e.s)+'">Area '+e.a+' · '+esc(e.s)+'</option>'; }).join('');
+  $('map-note').textContent='Tocca il modulo sulla piantina di '+L.nome+'. '+L.note;
+  mapStore=L.id;
+}
 function renderPicker(){
-  $('areas').innerHTML = AREAS.map(function(a){ return chip('Area '+a, a===state.area, 'data-area="'+a+'"'); }).join('');
-  $('types').innerHTML = Object.keys(TYPES).map(function(t){ return chip(t, t===state.type, 'data-type="'+t+'"'); }).join('');
-  var used={}; scans.forEach(function(s){ if(s.area===state.area) used[s.expo]=1; });
-  var h='';
-  for(var i=1;i<=TYPES[state.type];i++){
-    var n=state.type+' '+i;
-    h+='<button type="button" aria-pressed="'+(i===state.num)+'" class="chip'+(used[n]?' has':'')+'" data-num="'+i+'" aria-label="'+n+(used[n]?' (ha scansioni)':'')+'">'+i+'</button>';
-  }
-  $('nums').innerHTML=h;
-  var label='Area '+state.area+' · '+expoName();
+  if(mapStore!==state.store) buildMap();
+  $('stores').innerHTML=LAYOUTS.map(function(x){ return chip(x.nome+' '+x.id, x.id===state.store, 'data-store="'+x.id+'"'); }).join('');
+  var e=curEl(); state.sup=e.s;
+  var used={}; scans.forEach(function(s){ used[s.expo.replace(/ (Alto|Basso)$/,'')]=1; });
+  Array.prototype.forEach.call($('map').querySelectorAll('.el'), function(n){
+    var sup=n.getAttribute('data-sup');
+    n.setAttribute('class','el'+(used[sup]?' has':'')+(sup===e.s?' sel':''));
+  });
+  $('levels').innerHTML = isWall(e) ? ['Alto','Basso'].map(function(l){ return chip(l, l===state.level, 'data-level="'+l+'"'); }).join('') : '';
+  $('sel-sup').value=e.s;
+  var label=curLabel();
   $('current').textContent=label; $('vf-label').textContent=label;
 }
+function step(d){
+  var a=elems(), i=a.indexOf(curEl());
+  if(isWall(a[i]) && d>0 && state.level==='Alto'){ state.level='Basso'; }
+  else if(isWall(a[i]) && d<0 && state.level==='Basso'){ state.level='Alto'; }
+  else { i=Math.max(0, Math.min(a.length-1, i+d)); state.sup=a[i].s; state.level = d>0 ? 'Alto' : 'Basso'; }
+  render(); scrollToSel();
+}
+function scrollToSel(){
+  var n=$('map').querySelector('.el.sel'); if(!n) return;
+  try{ var m=$('map'), r=n.getBoundingClientRect(), mr=m.getBoundingClientRect(); m.scrollLeft += (r.left+r.width/2)-(mr.left+mr.width/2); }catch(e){}
+}
 function renderList(){
-  var here=scans.filter(function(s){ return s.area===state.area && s.expo===expoName(); });
+  var here=scans.filter(function(s){ return s.expo===expoName(); });
   $('sup-count').textContent=here.length+(here.length===1?' pezzo':' pezzi');
-  if(!here.length){ $('list').innerHTML='<p class="empty">Nessun pezzo su Area '+state.area+' · '+esc(expoName())+'. Avvia la scansione o scrivi il codice qui sopra.</p>'; return; }
+  if(!here.length){ $('list').innerHTML='<p class="empty">Nessun pezzo su '+esc(curLabel())+'. Avvia la scansione o scrivi il codice qui sopra.</p>'; return; }
   var groups={}, order=[];
   here.forEach(function(s){ if(!groups[s.ean]){ groups[s.ean]=[]; order.push(s.ean); } groups[s.ean].push(s); });
   $('list').innerHTML = order.reverse().map(function(ean){
@@ -388,7 +439,7 @@ function renderList(){
       '<button type="button" class="mini" data-plus="'+esc(ean)+'" aria-label="Aggiungi un pezzo di '+esc(ean)+'">+</button></div>';
   }).join('');
 }
-function expoOrder(e){ var p=e.split(' '); return ({Wall:100,Table:200,Gondola:300}[p[0]]||900)+(parseInt(p[1],10)||0); }
+function expoOrder(e){ var p=e.split(' '); return (({Wall:1,Table:2,Gondola:3}[p[0]]||9)*1000+(parseInt(p[1],10)||0))*10+(p[2]==='Basso'?1:0); }
 function renderSummary(){
   var by={}; scans.forEach(function(s){ var k=s.area+'|'+s.expo; by[k]=(by[k]||0)+1; });
   var keys=Object.keys(by).sort(function(a,b){ var A=a.split('|'), B=b.split('|'); return (A[0]-B[0]) || (expoOrder(A[1])-expoOrder(B[1])); });
@@ -404,27 +455,30 @@ function renderVersions(){
 function render(){
   $('ver-line').textContent=state.store+' · valido dal '+itDate(state.date);
   renderPicker(); renderList(); renderSummary();
-  ls.set('planogramma:sel', state);
+  ls.set('planogramma:sel2', state);
 }
 function switchVersion(){ scans=getScans(); render(); renderVersions(); renderDanger(false); }
 
 /* ---------- eventi ---------- */
 document.addEventListener('click', function(e){
   var t=e.target.closest('button'); if(!t) return;
-  if(t.dataset.area){ state.area=+t.dataset.area; render(); }
-  else if(t.dataset.type){ state.type=t.dataset.type; if(state.num>TYPES[state.type]) state.num=1; render(); }
-  else if(t.dataset.num){ state.num=+t.dataset.num; render(); }
+  if(t.dataset.store){ state.store=t.dataset.store; if(!elems().some(function(e){ return e.s===state.sup; })){ state.sup=elems()[0].s; state.level='Alto'; } switchVersion(); }
+  else if(t.dataset.level){ state.level=t.dataset.level; render(); }
   else if(t.dataset.plus){ addCodes([t.dataset.plus]); }
   else if(t.dataset.minus){ removeScan(t.dataset.minus); }
-  else if(t.dataset.ver){ var v=getVersions().filter(function(x){ return x.key===t.dataset.ver; })[0]; if(v){ state.store=v.store; state.date=v.validoDal; $('in-store').value=v.store; $('in-date').value=v.validoDal; switchVersion(); } }
+  else if(t.dataset.ver){ var v=getVersions().filter(function(x){ return x.key===t.dataset.ver; })[0]; if(v){ state.store=v.store; state.date=v.validoDal; $('in-date').value=v.validoDal; if(!elems().some(function(e){ return e.s===state.sup; })) state.sup=elems()[0].s; switchVersion(); } }
 });
 $('summary').addEventListener('click', function(e){
   var tr=e.target.closest('tr[data-go]'); if(!tr) return;
-  var p=tr.dataset.go.split('|'), q=p[1].split(' ');
-  state.area=+p[0]; state.type=q[0]; state.num=+q[1]; render(); window.scrollTo({top:0, behavior:'smooth'});
+  var q=tr.dataset.go.split('|')[1].split(' ');
+  state.sup=q[0]+' '+q[1]; if(q[2]) state.level=q[2]; render(); scrollToSel(); window.scrollTo({top:0, behavior:'smooth'});
 });
 $('btn-settings').onclick=function(){ var s=$('settings'); s.hidden=!s.hidden; this.setAttribute('aria-expanded', String(!s.hidden)); };
-$('in-store').addEventListener('change', function(e){ state.store=(e.target.value||'IT06').trim().toUpperCase(); e.target.value=state.store; switchVersion(); });
+$('map').addEventListener('click', function(e){ var n=e.target.closest('.el'); if(!n) return; var sup=n.getAttribute('data-sup'); if(sup!==state.sup){ state.sup=sup; state.level='Alto'; } render(); });
+$('sel-sup').addEventListener('change', function(e){ state.sup=e.target.value; state.level='Alto'; render(); scrollToSel(); });
+$('prev').onclick=function(){ step(-1); };
+$('next').onclick=function(){ step(1); };
+$('btn-zoom').onclick=function(){ $('map').classList.toggle('zoom'); scrollToSel(); };
 $('in-date').addEventListener('change', function(e){ if(e.target.value){ state.date=e.target.value; switchVersion(); } });
 $('manual').addEventListener('submit', function(e){
   e.preventDefault();
@@ -489,8 +543,8 @@ function renderDanger(confirming){
 }
 
 /* ---------- avvio ---------- */
-$('in-store').value=state.store; $('in-date').value=state.date;
-drawContours(); render(); renderVersions(); renderDanger(false);
+$('in-date').value=state.date; if(window.innerWidth<700) $('map').classList.add('zoom');
+drawContours(); render(); renderVersions(); renderDanger(false); scrollToSel();
 try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}
 if('serviceWorker' in navigator && location.protocol==='https:'){ navigator.serviceWorker.register('sw.js',{scope:'./'}).catch(function(){}); }
 })();
