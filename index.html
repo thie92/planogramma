@@ -13,6 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Source+Sans+3:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -203,7 +204,7 @@ input{border:1px solid var(--line);background:var(--surface-2);border-radius:2px
 
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/barcode-detector@3.2.1/dist/iife/ponyfill.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/barcode-detector@3.2.1/dist/iife/ponyfill.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 (function(){
@@ -254,11 +255,34 @@ function checkOk(c){
 }
 
 /* ---------- feedback ---------- */
+/* L'audio del telefono si sblocca solo dopo un tocco: lo attiviamo al primo tocco su qualsiasi punto,
+   così suonano anche gli inserimenti da foto, a mano e con +. */
 var audioCtx = null;
-function beep(){
-  try{ if(!audioCtx) return; var o=audioCtx.createOscillator(), g=audioCtx.createGain();
-    o.frequency.value=1150; g.gain.value=0.08; o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+0.08); }catch(e){}
-  try{ navigator.vibrate && navigator.vibrate(30); }catch(e){}
+function unlockAudio(){
+  try{
+    if(!audioCtx){ var AC=window.AudioContext||window.webkitAudioContext; if(!AC) return; audioCtx=new AC(); }
+    if(audioCtx.state!=='running' && audioCtx.resume) audioCtx.resume();
+    var b=audioCtx.createBuffer(1,1,22050), s=audioCtx.createBufferSource(); s.buffer=b; s.connect(audioCtx.destination); s.start(0);
+  }catch(e){}
+}
+['pointerdown','touchend','keydown'].forEach(function(ev){ document.addEventListener(ev, unlockAudio, {capture:true, passive:true}); });
+function tone(freq, start, dur, vol){
+  var o=audioCtx.createOscillator(), g=audioCtx.createGain(), t=audioCtx.currentTime+start;
+  o.type='square'; o.frequency.value=freq;
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vol,t+0.008);
+  g.gain.setValueAtTime(vol,t+dur-0.02); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t+dur+0.01);
+}
+function beep(kind){
+  try{
+    if(!audioCtx) unlockAudio();
+    if(audioCtx){
+      if(audioCtx.state!=='running' && audioCtx.resume) audioCtx.resume();
+      if(kind==='warn'){ tone(520,0,0.12,0.16); tone(390,0.15,0.2,0.16); }   // due note basse: controlla il codice
+      else { tone(1760,0,0.07,0.12); tone(2350,0.075,0.09,0.12); }           // "bip-bip" da cassa: registrato
+    }
+  }catch(e){}
+  try{ navigator.vibrate && navigator.vibrate(kind==='warn'?[80,60,80]:40); }catch(e){}
 }
 var undoIds = [];
 function showStatus(kind, text, undo){
@@ -277,85 +301,131 @@ function showStatus(kind, text, undo){
 function addCodes(codes){
   var ids=[], bad=[];
   codes.forEach(function(c){ if(!checkOk(c)) bad.push(c); ids.push(addScan(c)); });
-  beep();
+  beep(bad.length ? 'warn' : 'ok');
   var where=curLabel();
   if(bad.length) showStatus('warn','Aggiunto '+codes.join(', ')+' su '+where+', ma la cifra di controllo non torna: verifica il codice.', ids);
   else showStatus('ok',(codes.length>1?codes.length+' codici aggiunti':'Aggiunto '+codes[0])+' su '+where+'.', ids);
 }
 
-/* ---------- lettore (stesso motore ZXing-C++ dell'altra app) ---------- */
-var detector = null;
-function getDetector(){
-  if(detector) return detector;
-  if(!window.BarcodeDetectionAPI) return null;
-  detector = new BarcodeDetectionAPI.BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e']});
-  return detector;
+/* ---------- lettore ----------
+   Motore nativo del telefono se c'è (Android/Chrome), altrimenti ZXing-C++ (iPhone).
+   Caricato all'apertura della pagina, così la prima lettura non aspetta il download. */
+var FORMATS=['ean_13','ean_8','upc_a','upc_e'];
+var detector=null, detectorReady=null, engineName='';
+function initDetector(){
+  if(detectorReady) return detectorReady;
+  detectorReady = (function(){
+    var N=window.BarcodeDetector;
+    if(N && N.getSupportedFormats){
+      return N.getSupportedFormats().then(function(sup){
+        var f=FORMATS.filter(function(x){ return sup.indexOf(x)>=0; });
+        if(f.length>=2){ engineName='nativo'; return new N({formats:f}); }
+        return null;
+      }).catch(function(){ return null; });
+    }
+    return Promise.resolve(null);
+  })().then(function(d){
+    if(!d && window.BarcodeDetectionAPI){ engineName='ZXing-C++'; d=new BarcodeDetectionAPI.BarcodeDetector({formats:FORMATS}); }
+    detector=d;
+    if(!d) return null;
+    var c=document.createElement('canvas'); c.width=c.height=32;          // lettura a vuoto: scarica e avvia il motore subito
+    var x=c.getContext('2d'); x.fillStyle='#fff'; x.fillRect(0,0,32,32);
+    return d.detect(c).catch(function(){}).then(function(){ return d; });
+  }).catch(function(){ detectorReady=null; return null; });
+  return detectorReady;
 }
-var stream=null, running=false, busy=false, lastTick=0, wakeLock=null;
-var lastRead={code:null,t:0}, lastSeen={}, boxTimer=null;
-var GAP_CONFIRM=1000, GAP_HOLD=1200, FPS_MS=110;
+function getDetector(){ return detector; }
+
+var stream=null, running=false, busy=false, timer=null, tick=0, wakeLock=null;
+var pending={}, lastSeen={}, boxTimer=null, lastHit=0, lastHint=0;
+var NEED_READS=2, READ_WINDOW=700, GAP_HOLD=1200, TICK_MS=70, CROP_W=1100, FULL_W=960, FULL_EVERY=5;
 var cv=document.createElement('canvas'), cx=cv.getContext('2d',{willReadFrequently:true});
+var geo=null;   // zona del riquadro nel video, ricalcolata solo quando cambia lo schermo
 
 function flash(cls){ var b=$('box'); b.className='box '+cls; clearTimeout(boxTimer); boxTimer=setTimeout(function(){ b.className='box'; }, cls==='ok'?450:250); }
+/* Un codice conta dopo 2 letture uguali entro 0,7 s (le letture sbagliate non si ripetono identiche);
+   resta "già contato" finché l'etichetta rimane davanti alla fotocamera. */
 function onRead(code, t){
-  if(!checkOk(code)) return;
-  var confirmed = lastRead.code===code && (t-lastRead.t) < GAP_CONFIRM;
-  lastRead = {code:code, t:t};
-  if(!confirmed){ flash('seen'); return; }
-  var prev = lastSeen[code]; lastSeen[code] = t;
-  if(prev && (t-prev) < GAP_HOLD) return;     // etichetta ancora davanti: già contata
-  flash('ok'); addCodes([code]);
+  if(!checkOk(code)) return false;
+  var p=pending[code];
+  if(!p || t-p.t>READ_WINDOW) p=pending[code]={n:0,t:t};
+  p.n++; p.t=t;
+  if(p.n<NEED_READS){ flash('seen'); return false; }
+  var prev=lastSeen[code]; lastSeen[code]=t;
+  if(prev && (t-prev)<GAP_HOLD) return false;
+  lastHit=t; flash('ok'); addCodes([code]); return true;
 }
-function cropFrame(){
-  var v=$('video'), vw=v.videoWidth, vh=v.videoHeight; if(!vw||!vh) return false;
-  var vf=$('vf').getBoundingClientRect(), bx=$('box').getBoundingClientRect();
+function measure(){
+  var v=$('video'), vw=v.videoWidth, vh=v.videoHeight; if(!vw||!vh) return null;
+  var vf=$('vf').getBoundingClientRect(), bx=$('box').getBoundingClientRect(); if(!vf.width||!bx.width) return null;
   var scale=Math.max(vf.width/vw, vf.height/vh), ox=(vw*scale-vf.width)/2, oy=(vh*scale-vf.height)/2;
-  var sx=(bx.left-vf.left+ox)/scale, sy=(bx.top-vf.top+oy)/scale, sw=bx.width/scale, sh=bx.height/scale;
-  var k=Math.min(1, 1600/sw);
-  cv.width=Math.round(sw*k); cv.height=Math.round(sh*k);
-  cx.drawImage(v, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
+  var sx=Math.max(0,(bx.left-vf.left+ox)/scale), sy=Math.max(0,(bx.top-vf.top+oy)/scale);
+  var sw=Math.min(vw-sx, bx.width/scale), sh=Math.min(vh-sy, bx.height/scale);
+  return {vw:vw, vh:vh, sx:sx, sy:sy, sw:sw, sh:sh};
+}
+function grab(full){
+  var v=$('video');
+  if(!geo || geo.vw!==v.videoWidth || geo.vh!==v.videoHeight) geo=measure();
+  if(!geo) return false;
+  var r = full ? {sx:0, sy:0, sw:geo.vw, sh:geo.vh} : geo;
+  var k=Math.min(1, (full?FULL_W:CROP_W)/r.sw), w=Math.round(r.sw*k), h=Math.round(r.sh*k);
+  if(cv.width!==w || cv.height!==h){ cv.width=w; cv.height=h; }
+  cx.drawImage(v, r.sx, r.sy, r.sw, r.sh, 0, 0, w, h);
   return true;
 }
-function loop(now){
+window.addEventListener('resize', function(){ geo=null; });
+window.addEventListener('orientationchange', function(){ geo=null; });
+
+function loop(){
   if(!running) return;
-  requestAnimationFrame(loop);
-  if(busy || now-lastTick < FPS_MS) return;
-  lastTick = now; busy = true;
-  var det=getDetector();
-  if(!det || !cropFrame()){ busy=false; return; }
+  var t0=performance.now(), det=getDetector();
+  tick++;
+  if(!det || !grab(tick%FULL_EVERY===0)){ timer=setTimeout(loop, 120); return; }
   det.detect(cv).then(function(res){
     var t=performance.now();
-    res.forEach(function(r){ onRead(normalize(r.rawValue), t); });
-  }).catch(function(){}).then(function(){ busy=false; });
+    for(var i=0;i<res.length;i++){ if(onRead(normalize(res[i].rawValue), t)) break; }
+  }).catch(function(){}).then(function(){
+    if(!running) return;
+    var now=performance.now();
+    for(var k in pending){ if(now-pending[k].t>5000) delete pending[k]; }
+    if(now-Math.max(lastHit,lastHint)>8000){ lastHint=now; showStatus('ok','Nessuna lettura: tieni l\'etichetta ferma a 15–20 cm, dritta nel riquadro e ben illuminata.'); }
+    timer=setTimeout(loop, Math.max(15, TICK_MS-(now-t0)));
+  });
 }
 function startScan(){
-  if(!getDetector()){ showStatus('warn','Il lettore non si è caricato: controlla la connessione e riapri la pagina.'); return; }
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ showStatus('warn','Questo browser non dà accesso alla fotocamera: usa il pulsante Foto.'); return; }
-  try{ audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)(); audioCtx.resume && audioCtx.resume(); }catch(e){}
+  unlockAudio();
+  var ready=initDetector();
   navigator.mediaDevices.getUserMedia({audio:false, video:{facingMode:{ideal:'environment'}, width:{ideal:1920}, height:{ideal:1080}}})
   .then(function(s){
     stream=s; var v=$('video'); v.srcObject=s; v.play().catch(function(){});
     var track=s.getVideoTracks()[0];
     try{ track.applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(function(){}); }catch(e){}
     $('vf').hidden=false; $('btn-start').hidden=true; $('btn-stop').hidden=false; $('scanner').classList.add('live');
-    running=true; lastRead={code:null,t:0}; lastSeen={};
+    running=true; pending={}; lastSeen={}; geo=null; tick=0; lastHit=performance.now(); lastHint=0;
     try{ navigator.wakeLock && navigator.wakeLock.request('screen').then(function(w){ wakeLock=w; }).catch(function(){}); }catch(e){}
     showStatus('ok','Inquadra l\'etichetta dentro il riquadro, a 15–20 cm. Per contare un altro pezzo uguale allontanala e riavvicinala, oppure usa +.');
-    requestAnimationFrame(loop);
+    return ready.then(function(d){
+      if(!running) return;
+      if(!d){ stopScan(); showStatus('warn','Il lettore non si è caricato: controlla la connessione e riapri la pagina.'); return; }
+      loop();
+    });
   }).catch(function(err){
     showStatus('warn', err && err.name==='NotAllowedError' ? 'Accesso alla fotocamera negato: abilitalo nelle impostazioni del browser per questo sito.' : 'Non riesco ad aprire la fotocamera. Usa il pulsante Foto.');
   });
 }
 function stopScan(){
-  running=false;
+  running=false; clearTimeout(timer);
   if(stream){ stream.getTracks().forEach(function(t){ t.stop(); }); stream=null; }
   $('video').srcObject=null; $('vf').hidden=true; $('btn-start').hidden=false; $('btn-stop').hidden=true; $('scanner').classList.remove('live');
   try{ wakeLock && wakeLock.release(); }catch(e){} wakeLock=null;
 }
 document.addEventListener('visibilitychange', function(){ if(document.hidden && running) stopScan(); });
+initDetector();
 
 function decodePhoto(file){
-  var det=getDetector(); if(!det) return Promise.resolve([]);
+  return initDetector().then(function(det){
+    if(!det) return [];
   return createImageBitmap(file).then(function(bmp){
     return det.detect(bmp).then(function(res){
       if(res.length) return res;
@@ -365,6 +435,7 @@ function decodePhoto(file){
     });
   }).then(function(res){
     var out=[]; res.forEach(function(r){ var c=normalize(r.rawValue); if(out.indexOf(c)<0) out.push(c); }); return out;
+  });
   });
 }
 

@@ -1,6 +1,6 @@
 // Copia salvata dell'app Planogramma, per aprirla anche senza rete.
 // Nomi delle cache con prefisso proprio, per non toccare quelle del lettore EAN nella cartella principale.
-const VERSION = 'planogramma-v2';
+const VERSION = 'planogramma-v3';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 const CDN = ['cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
