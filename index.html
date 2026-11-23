@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Planogramma</title>
+<meta name="theme-color" content="#111111" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Planogramma">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Source+Sans+3:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Stessa grafica del lettore EAN: bianco, nero e grigi, un solo giallo-verde oliva per le azioni,
+   titoli e pulsanti in maiuscolo, frecce sui comandi, curve di livello in testa e due cartelli segnavia per i totali. */
+:root{
+  --bg:#EFEFEC; --surface:#FFFFFF; --surface-2:#F5F5F2; --ink:#111111; --muted:#5B5B57; --line:#D6D6D1;
+  --accent:#B8BC04; --accent-ink:#111111; --focus:#111111;
+  --hero:#111111; --hero-ink:#FFFFFF; --hero-dim:#A8A8A2; --hero-line:rgba(255,255,255,.12);
+  --signal:#B8BC04; --ok:#2E7D32; --warn:#8A5A00; --err:#B3261E; --hl:#F0F2B8;
+  --font-display:'Archivo','Arial Narrow',system-ui,sans-serif;
+  --font-body:'Source Sans 3',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0B0B0A; --surface:#151514; --surface-2:#1D1D1B; --ink:#F2F2EE; --muted:#A0A09A; --line:#2E2E2B;
+  --accent:#B8BC04; --accent-ink:#111111; --focus:#D4D820; --hero:#000000; --hero-ink:#FFFFFF; --hero-dim:#8E8E88;
+  --hero-line:rgba(255,255,255,.10); --signal:#D4D820; --ok:#66BB6A; --warn:#E8A44C; --err:#FF8A80; --hl:#34360A; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0B0B0A; --surface:#151514; --surface-2:#1D1D1B; --ink:#F2F2EE; --muted:#A0A09A; --line:#2E2E2B;
+  --accent:#B8BC04; --accent-ink:#111111; --focus:#D4D820; --hero:#000000; --hero-ink:#FFFFFF; --hero-dim:#8E8E88;
+  --hero-line:rgba(255,255,255,.10); --signal:#D4D820; --ok:#66BB6A; --warn:#E8A44C; --err:#FF8A80; --hl:#34360A; color-scheme:dark}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.45 var(--font-body);
+  padding-block:calc(12px + env(safe-area-inset-top,0px)) calc(32px + env(safe-area-inset-bottom,0px));
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;min-height:44px;border-radius:2px;border:1px solid var(--line);background:var(--surface);padding:0 14px;
+  font-family:var(--font-display);font-weight:700;text-transform:uppercase;letter-spacing:.04em;font-size:14px}
+button:focus-visible,input:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.dark{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.ghost{background:transparent}
+.danger{color:var(--err)}
+.arrow::after{content:" \2192"}
+
+/* testata */
+.hero{position:relative;overflow:hidden;background:var(--hero);color:var(--hero-ink);border-radius:2px;padding:18px 16px 16px}
+.contours{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
+.hero-in{position:relative;display:flex;flex-direction:column;gap:12px}
+.hero-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.hero h1{font-family:var(--font-display);font-weight:800;text-transform:uppercase;letter-spacing:.02em;font-size:26px;line-height:1;margin:0}
+.hero .sub{margin:6px 0 0;color:var(--hero-dim);font-size:13px;text-transform:uppercase;letter-spacing:.08em}
+.hero .ghost{color:var(--hero-ink);border-color:var(--hero-line);min-height:38px;font-size:12px}
+.signs{display:flex;gap:8px;flex-wrap:wrap}
+.sign{background:var(--accent);color:var(--accent-ink);padding:6px 26px 6px 10px;min-width:120px;
+  clip-path:polygon(0 0,calc(100% - 14px) 0,100% 50%,calc(100% - 14px) 100%,0 100%)}
+.sign small{display:block;font-family:var(--font-display);font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase}
+.sign b{font-family:var(--font-display);font-weight:800;font-size:24px;line-height:1.1;font-variant-numeric:tabular-nums}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:2px;padding:14px;display:flex;flex-direction:column;gap:12px;min-width:0}
+h2{font-family:var(--font-display);font-weight:700;text-transform:uppercase;letter-spacing:.08em;font-size:13px;margin:0;color:var(--muted)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.between{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.chip{min-width:56px}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.nums{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
+.nums button{padding:0;min-height:42px;font-variant-numeric:tabular-nums;font-size:15px}
+.nums button.has{box-shadow:inset 0 -4px 0 var(--accent)}
+.current{font-family:var(--font-display);font-weight:800;text-transform:uppercase;font-size:22px;letter-spacing:.01em}
+.field{display:flex;flex-direction:column;gap:4px;flex:1;min-width:120px}
+.field label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-family:var(--font-display);font-weight:700}
+input{border:1px solid var(--line);background:var(--surface-2);border-radius:2px;min-height:44px;padding:0 12px;width:100%}
+.mono{font-family:var(--font-mono);letter-spacing:.03em}
+.note{font-size:13px;color:var(--muted);margin:0}
+
+/* scanner */
+.scanner{position:relative}
+.scanner.live{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;box-shadow:0 6px 16px rgba(0,0,0,.18)}
+.vf{position:relative;background:#000;height:210px;overflow:hidden;border-radius:2px}
+.vf video{width:100%;height:100%;object-fit:cover;display:block}
+.box{position:absolute;left:8%;right:8%;top:28%;bottom:28%;border:2px solid rgba(255,255,255,.85);border-radius:2px;transition:border-color .1s,background .1s}
+.box::after{content:"";position:absolute;left:6%;right:6%;top:50%;height:2px;background:var(--signal);opacity:.9}
+.box.seen{border-color:var(--signal)}
+.box.ok{border-color:#66BB6A;background:rgba(102,187,106,.22)}
+.vf-label{position:absolute;left:10px;top:8px;right:10px;color:#fff;font-family:var(--font-display);font-weight:800;text-transform:uppercase;font-size:14px;letter-spacing:.04em;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+.msg{border-radius:2px;padding:10px 12px;font-size:15px;display:flex;justify-content:space-between;gap:10px;align-items:center;background:var(--surface-2);border-left:4px solid var(--line)}
+.msg.ok{border-left-color:var(--accent);background:var(--hl)}
+.msg.warn{border-left-color:var(--warn);color:var(--warn)}
+.msg button{min-height:34px;font-size:12px}
+
+.list{display:flex;flex-direction:column}
+.item{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.item:first-child{border-top:0}
+.ean{font-family:var(--font-mono);font-size:15px;flex:1;min-width:0;overflow-wrap:anywhere}
+.tag{font-family:var(--font-display);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding:2px 6px;background:var(--hl);color:var(--warn);border-radius:2px;margin-left:6px}
+.qty{font-family:var(--font-display);font-weight:800;font-variant-numeric:tabular-nums;min-width:36px;text-align:center}
+.mini{min-height:38px;min-width:38px;padding:0;font-size:18px}
+.count{font-family:var(--font-display);font-weight:800;font-size:13px;text-transform:uppercase;letter-spacing:.06em}
+.empty{color:var(--muted);margin:0}
+.sum{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.sum td{padding:8px 0;border-top:1px solid var(--line)}
+.sum td:last-child{text-align:right;font-family:var(--font-display);font-weight:800}
+.sum tr[data-go]{cursor:pointer}
+@media (prefers-reduced-motion:reduce){.box{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <svg class="contours" id="contours" viewBox="0 0 400 200" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>
+  <div class="hero-in">
+    <div class="hero-top">
+      <div>
+        <h1>Planogramma</h1>
+        <p class="sub" id="ver-line">IT06 · valido dal …</p>
+      </div>
+      <button class="ghost" id="btn-settings" aria-expanded="false">Modifica</button>
+    </div>
+    <div class="signs">
+      <div class="sign"><small>Pezzi</small><b id="tot-pieces">0</b></div>
+      <div class="sign"><small>Supporti</small><b id="tot-sup">0</b></div>
+    </div>
+  </div>
+</header>
+
+<section class="card" id="settings" hidden>
+  <h2>Negozio e data del layout</h2>
+  <div class="row">
+    <div class="field"><label for="in-store">StoreID</label><input id="in-store" autocomplete="off" value="IT06"></div>
+    <div class="field"><label for="in-date">Valido dal</label><input id="in-date" type="date"></div>
+  </div>
+  <p class="note">Ogni coppia negozio + data è una versione del planogramma. Per un nuovo layout scegli una data nuova: le versioni precedenti restano salvate su questo telefono.</p>
+  <div id="versions"></div>
+</section>
+
+<section class="card" aria-labelledby="h-sup">
+  <h2 id="h-sup">Supporto</h2>
+  <div class="row" role="group" aria-label="Area" id="areas"></div>
+  <div class="row" role="group" aria-label="Tipo" id="types"></div>
+  <div class="nums" role="group" aria-label="Numero" id="nums"></div>
+  <div class="current" id="current">Area 1 · Wall 1</div>
+</section>
+
+<section class="card scanner" id="scanner" aria-labelledby="h-scan">
+  <h2 id="h-scan">Scansione</h2>
+  <div class="vf" id="vf" hidden>
+    <video id="video" playsinline muted autoplay></video>
+    <div class="box" id="box"></div>
+    <div class="vf-label" id="vf-label">Area 1 · Wall 1</div>
+  </div>
+  <div class="row">
+    <button class="primary arrow" id="btn-start" style="flex:1">Avvia scansione</button>
+    <button class="dark" id="btn-stop" hidden style="flex:1">Stop</button>
+    <button id="btn-photo">Foto</button>
+  </div>
+  <form class="row" id="manual">
+    <div class="field" style="flex:2"><label for="in-ean">EAN a mano o con lettore</label><input id="in-ean" class="mono" inputmode="numeric" autocomplete="off" placeholder="4053866917391"></div>
+    <button type="submit" style="align-self:flex-end">Aggiungi</button>
+  </form>
+  <div id="status" aria-live="polite"></div>
+  <input type="file" id="cam" accept="image/*" capture="environment" hidden>
+</section>
+
+<section class="card" aria-labelledby="h-list">
+  <div class="between"><h2 id="h-list">Su questo supporto</h2><span class="count" id="sup-count">0 pezzi</span></div>
+  <div class="list" id="list"></div>
+</section>
+
+<section class="card" aria-labelledby="h-sum">
+  <h2 id="h-sum">Riepilogo versione</h2>
+  <table class="sum"><tbody id="summary"></tbody></table>
+  <button class="primary arrow" id="btn-xlsx">Salva Excel</button>
+  <p class="note">Colonne come il foglio Planogramma: Valido dal, StoreID, EAN, Area, Esposizione. Le scansioni restano su questo telefono finché non elimini la versione.</p>
+  <div id="danger-zone"></div>
+</section>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/barcode-detector@3.2.1/dist/iife/ponyfill.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+(function(){
+'use strict';
+var $ = function(id){ return document.getElementById(id); };
+var TYPES = {Wall:30, Table:10, Gondola:10};
+var AREAS = [1,2,3];
+var ls = {
+  get:function(k,d){ try{ var v=localStorage.getItem(k); return v==null?d:JSON.parse(v); }catch(e){ return d; } },
+  set:function(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); return true; }catch(e){ return false; } }
+};
+function today(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function itDate(iso){ return iso ? iso.split('-').reverse().join('/') : ''; }
+function esc(s){ return String(s).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+var state = Object.assign({store:'IT06', date:today(), area:1, type:'Wall', num:1}, ls.get('planogramma:sel',{}));
+if(!state.date) state.date = today();
+function versionKey(){ return (state.store||'X').replace(/[^A-Za-z0-9-]/g,'')+'_'+state.date; }
+function expoName(){ return state.type+' '+state.num; }
+function getScans(){ return ls.get('planogramma:scans:'+versionKey(), []); }
+function putScans(a){ if(!ls.set('planogramma:scans:'+versionKey(), a)) showStatus('warn','Memoria del telefono piena: salva l\'Excel ed elimina le versioni vecchie.'); }
+function getVersions(){ return ls.get('planogramma:versions', []); }
+var scans = getScans();
+
+function ensureVersion(){
+  var v = getVersions(), key = versionKey();
+  if(!v.some(function(x){ return x.key===key; })){ v.push({key:key, store:state.store, validoDal:state.date}); ls.set('planogramma:versions', v); renderVersions(); }
+}
+function addScan(ean){
+  var rec = {id:'s'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), ean:ean, area:state.area, expo:expoName(), store:state.store, validoDal:state.date, ts:Date.now()};
+  scans = getScans(); scans.push(rec); putScans(scans); ensureVersion(); render(); return rec.id;
+}
+function removeScan(id){ scans = getScans().filter(function(s){ return s.id!==id; }); putScans(scans); render(); }
+
+/* ---------- EAN ---------- */
+function normalize(raw){ var c=String(raw||'').replace(/\D/g,''); if(c.length===12) c='0'+c; return c; }
+function checkOk(c){
+  if(!/^\d{8}$|^\d{13}$/.test(c)) return false;
+  var d=c.split('').map(Number), last=d.pop(), s=0;
+  d.reverse().forEach(function(n,i){ s += n*(i%2===0?3:1); });
+  return (10 - s%10)%10 === last;
+}
+
+/* ---------- feedback ---------- */
+var audioCtx = null;
+function beep(){
+  try{ if(!audioCtx) return; var o=audioCtx.createOscillator(), g=audioCtx.createGain();
+    o.frequency.value=1150; g.gain.value=0.08; o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+0.08); }catch(e){}
+  try{ navigator.vibrate && navigator.vibrate(30); }catch(e){}
+}
+var undoIds = [];
+function showStatus(kind, text, undo){
+  var box=$('status'); box.innerHTML='';
+  if(!text) return;
+  var d=document.createElement('div'); d.className='msg '+kind;
+  var s=document.createElement('span'); s.textContent=text; d.appendChild(s);
+  if(undo && undo.length){
+    undoIds = undo.slice();
+    var b=document.createElement('button'); b.className='ghost'; b.textContent='Annulla';
+    b.onclick=function(){ undoIds.forEach(removeScan); undoIds=[]; showStatus('ok','Annullato.'); };
+    d.appendChild(b);
+  }
+  box.appendChild(d);
+}
+function addCodes(codes){
+  var ids=[], bad=[];
+  codes.forEach(function(c){ if(!checkOk(c)) bad.push(c); ids.push(addScan(c)); });
+  beep();
+  var where='Area '+state.area+' · '+expoName();
+  if(bad.length) showStatus('warn','Aggiunto '+codes.join(', ')+' su '+where+', ma la cifra di controllo non torna: verifica il codice.', ids);
+  else showStatus('ok',(codes.length>1?codes.length+' codici aggiunti':'Aggiunto '+codes[0])+' su '+where+'.', ids);
+}
+
+/* ---------- lettore (stesso motore ZXing-C++ dell'altra app) ---------- */
+var detector = null;
+function getDetector(){
+  if(detector) return detector;
+  if(!window.BarcodeDetectionAPI) return null;
+  detector = new BarcodeDetectionAPI.BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e']});
+  return detector;
+}
+var stream=null, running=false, busy=false, lastTick=0, wakeLock=null;
+var lastRead={code:null,t:0}, lastSeen={}, boxTimer=null;
+var GAP_CONFIRM=1000, GAP_HOLD=1200, FPS_MS=110;
+var cv=document.createElement('canvas'), cx=cv.getContext('2d',{willReadFrequently:true});
+
+function flash(cls){ var b=$('box'); b.className='box '+cls; clearTimeout(boxTimer); boxTimer=setTimeout(function(){ b.className='box'; }, cls==='ok'?450:250); }
+function onRead(code, t){
+  if(!checkOk(code)) return;
+  var confirmed = lastRead.code===code && (t-lastRead.t) < GAP_CONFIRM;
+  lastRead = {code:code, t:t};
+  if(!confirmed){ flash('seen'); return; }
+  var prev = lastSeen[code]; lastSeen[code] = t;
+  if(prev && (t-prev) < GAP_HOLD) return;     // etichetta ancora davanti: già contata
+  flash('ok'); addCodes([code]);
+}
+function cropFrame(){
+  var v=$('video'), vw=v.videoWidth, vh=v.videoHeight; if(!vw||!vh) return false;
+  var vf=$('vf').getBoundingClientRect(), bx=$('box').getBoundingClientRect();
+  var scale=Math.max(vf.width/vw, vf.height/vh), ox=(vw*scale-vf.width)/2, oy=(vh*scale-vf.height)/2;
+  var sx=(bx.left-vf.left+ox)/scale, sy=(bx.top-vf.top+oy)/scale, sw=bx.width/scale, sh=bx.height/scale;
+  var k=Math.min(1, 1600/sw);
+  cv.width=Math.round(sw*k); cv.height=Math.round(sh*k);
+  cx.drawImage(v, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
+  return true;
+}
+function loop(now){
+  if(!running) return;
+  requestAnimationFrame(loop);
+  if(busy || now-lastTick < FPS_MS) return;
+  lastTick = now; busy = true;
+  var det=getDetector();
+  if(!det || !cropFrame()){ busy=false; return; }
+  det.detect(cv).then(function(res){
+    var t=performance.now();
+    res.forEach(function(r){ onRead(normalize(r.rawValue), t); });
+  }).catch(function(){}).then(function(){ busy=false; });
+}
+function startScan(){
+  if(!getDetector()){ showStatus('warn','Il lettore non si è caricato: controlla la connessione e riapri la pagina.'); return; }
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ showStatus('warn','Questo browser non dà accesso alla fotocamera: usa il pulsante Foto.'); return; }
+  try{ audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)(); audioCtx.resume && audioCtx.resume(); }catch(e){}
+  navigator.mediaDevices.getUserMedia({audio:false, video:{facingMode:{ideal:'environment'}, width:{ideal:1920}, height:{ideal:1080}}})
+  .then(function(s){
+    stream=s; var v=$('video'); v.srcObject=s; v.play().catch(function(){});
+    var track=s.getVideoTracks()[0];
+    try{ track.applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(function(){}); }catch(e){}
+    $('vf').hidden=false; $('btn-start').hidden=true; $('btn-stop').hidden=false; $('scanner').classList.add('live');
+    running=true; lastRead={code:null,t:0}; lastSeen={};
+    try{ navigator.wakeLock && navigator.wakeLock.request('screen').then(function(w){ wakeLock=w; }).catch(function(){}); }catch(e){}
+    showStatus('ok','Inquadra l\'etichetta dentro il riquadro, a 15–20 cm. Per contare un altro pezzo uguale allontanala e riavvicinala, oppure usa +.');
+    requestAnimationFrame(loop);
+  }).catch(function(err){
+    showStatus('warn', err && err.name==='NotAllowedError' ? 'Accesso alla fotocamera negato: abilitalo nelle impostazioni del browser per questo sito.' : 'Non riesco ad aprire la fotocamera. Usa il pulsante Foto.');
+  });
+}
+function stopScan(){
+  running=false;
+  if(stream){ stream.getTracks().forEach(function(t){ t.stop(); }); stream=null; }
+  $('video').srcObject=null; $('vf').hidden=true; $('btn-start').hidden=false; $('btn-stop').hidden=true; $('scanner').classList.remove('live');
+  try{ wakeLock && wakeLock.release(); }catch(e){} wakeLock=null;
+}
+document.addEventListener('visibilitychange', function(){ if(document.hidden && running) stopScan(); });
+
+function decodePhoto(file){
+  var det=getDetector(); if(!det) return Promise.resolve([]);
+  return createImageBitmap(file).then(function(bmp){
+    return det.detect(bmp).then(function(res){
+      if(res.length) return res;
+      var k=Math.min(1, 1600/Math.max(bmp.width,bmp.height)), c=document.createElement('canvas');
+      c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k); c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);
+      return det.detect(c);
+    });
+  }).then(function(res){
+    var out=[]; res.forEach(function(r){ var c=normalize(r.rawValue); if(out.indexOf(c)<0) out.push(c); }); return out;
+  });
+}
+
+/* ---------- disegno ---------- */
+function drawContours(){
+  var svg=$('contours'), h='', cx0=300, cy0=60;
+  for(var i=1;i<=9;i++){
+    var r=18*i, pts=[];
+    for(var a=0;a<=360;a+=15){
+      var rad=a*Math.PI/180, wob=1+0.12*Math.sin(3*rad+i)+0.06*Math.cos(5*rad-i);
+      pts.push((cx0+Math.cos(rad)*r*1.5*wob).toFixed(1)+','+(cy0+Math.sin(rad)*r*wob).toFixed(1));
+    }
+    h+='<polyline points="'+pts.join(' ')+'" fill="none" stroke="var(--hero-line)" stroke-width="1"/>';
+  }
+  svg.innerHTML=h;
+}
+function chip(label, pressed, attr){ return '<button type="button" class="chip" aria-pressed="'+pressed+'" '+attr+'>'+label+'</button>'; }
+function renderPicker(){
+  $('areas').innerHTML = AREAS.map(function(a){ return chip('Area '+a, a===state.area, 'data-area="'+a+'"'); }).join('');
+  $('types').innerHTML = Object.keys(TYPES).map(function(t){ return chip(t, t===state.type, 'data-type="'+t+'"'); }).join('');
+  var used={}; scans.forEach(function(s){ if(s.area===state.area) used[s.expo]=1; });
+  var h='';
+  for(var i=1;i<=TYPES[state.type];i++){
+    var n=state.type+' '+i;
+    h+='<button type="button" aria-pressed="'+(i===state.num)+'" class="chip'+(used[n]?' has':'')+'" data-num="'+i+'" aria-label="'+n+(used[n]?' (ha scansioni)':'')+'">'+i+'</button>';
+  }
+  $('nums').innerHTML=h;
+  var label='Area '+state.area+' · '+expoName();
+  $('current').textContent=label; $('vf-label').textContent=label;
+}
+function renderList(){
+  var here=scans.filter(function(s){ return s.area===state.area && s.expo===expoName(); });
+  $('sup-count').textContent=here.length+(here.length===1?' pezzo':' pezzi');
+  if(!here.length){ $('list').innerHTML='<p class="empty">Nessun pezzo su Area '+state.area+' · '+esc(expoName())+'. Avvia la scansione o scrivi il codice qui sopra.</p>'; return; }
+  var groups={}, order=[];
+  here.forEach(function(s){ if(!groups[s.ean]){ groups[s.ean]=[]; order.push(s.ean); } groups[s.ean].push(s); });
+  $('list').innerHTML = order.reverse().map(function(ean){
+    var arr=groups[ean];
+    return '<div class="item"><span class="ean">'+esc(ean)+(checkOk(ean)?'':'<span class="tag">Da verificare</span>')+'</span>'+
+      '<button type="button" class="mini" data-minus="'+arr[arr.length-1].id+'" aria-label="Togli un pezzo di '+esc(ean)+'">−</button>'+
+      '<span class="qty">×'+arr.length+'</span>'+
+      '<button type="button" class="mini" data-plus="'+esc(ean)+'" aria-label="Aggiungi un pezzo di '+esc(ean)+'">+</button></div>';
+  }).join('');
+}
+function expoOrder(e){ var p=e.split(' '); return ({Wall:100,Table:200,Gondola:300}[p[0]]||900)+(parseInt(p[1],10)||0); }
+function renderSummary(){
+  var by={}; scans.forEach(function(s){ var k=s.area+'|'+s.expo; by[k]=(by[k]||0)+1; });
+  var keys=Object.keys(by).sort(function(a,b){ var A=a.split('|'), B=b.split('|'); return (A[0]-B[0]) || (expoOrder(A[1])-expoOrder(B[1])); });
+  $('tot-pieces').textContent=scans.length; $('tot-sup').textContent=keys.length;
+  $('summary').innerHTML = keys.length ? keys.map(function(k){ var p=k.split('|'); return '<tr data-go="'+esc(k)+'"><td>Area '+p[0]+' · '+esc(p[1])+'</td><td>'+by[k]+'</td></tr>'; }).join('')
+    : '<tr><td class="empty">Ancora nessuna scansione in questa versione.</td></tr>';
+}
+function renderVersions(){
+  var others=getVersions().filter(function(v){ return v.key!==versionKey(); }).sort(function(a,b){ return String(b.validoDal).localeCompare(String(a.validoDal)); });
+  $('versions').innerHTML = others.length ? '<p class="note" style="margin-bottom:6px">Versioni salvate su questo telefono</p><div class="row">'+
+    others.map(function(v){ return '<button type="button" data-ver="'+esc(v.key)+'">'+esc(v.store)+' · '+itDate(v.validoDal)+'</button>'; }).join('')+'</div>' : '';
+}
+function render(){
+  $('ver-line').textContent=state.store+' · valido dal '+itDate(state.date);
+  renderPicker(); renderList(); renderSummary();
+  ls.set('planogramma:sel', state);
+}
+function switchVersion(){ scans=getScans(); render(); renderVersions(); renderDanger(false); }
+
+/* ---------- eventi ---------- */
+document.addEventListener('click', function(e){
+  var t=e.target.closest('button'); if(!t) return;
+  if(t.dataset.area){ state.area=+t.dataset.area; render(); }
+  else if(t.dataset.type){ state.type=t.dataset.type; if(state.num>TYPES[state.type]) state.num=1; render(); }
+  else if(t.dataset.num){ state.num=+t.dataset.num; render(); }
+  else if(t.dataset.plus){ addCodes([t.dataset.plus]); }
+  else if(t.dataset.minus){ removeScan(t.dataset.minus); }
+  else if(t.dataset.ver){ var v=getVersions().filter(function(x){ return x.key===t.dataset.ver; })[0]; if(v){ state.store=v.store; state.date=v.validoDal; $('in-store').value=v.store; $('in-date').value=v.validoDal; switchVersion(); } }
+});
+$('summary').addEventListener('click', function(e){
+  var tr=e.target.closest('tr[data-go]'); if(!tr) return;
+  var p=tr.dataset.go.split('|'), q=p[1].split(' ');
+  state.area=+p[0]; state.type=q[0]; state.num=+q[1]; render(); window.scrollTo({top:0, behavior:'smooth'});
+});
+$('btn-settings').onclick=function(){ var s=$('settings'); s.hidden=!s.hidden; this.setAttribute('aria-expanded', String(!s.hidden)); };
+$('in-store').addEventListener('change', function(e){ state.store=(e.target.value||'IT06').trim().toUpperCase(); e.target.value=state.store; switchVersion(); });
+$('in-date').addEventListener('change', function(e){ if(e.target.value){ state.date=e.target.value; switchVersion(); } });
+$('manual').addEventListener('submit', function(e){
+  e.preventDefault();
+  var c=normalize($('in-ean').value);
+  if(c.length!==8 && c.length!==13){ showStatus('warn','Un EAN ha 8 o 13 cifre: controlla il numero.'); return; }
+  $('in-ean').value=''; addCodes([c]); $('in-ean').focus();
+});
+$('btn-start').onclick=startScan;
+$('btn-stop').onclick=stopScan;
+$('btn-photo').onclick=function(){ $('cam').value=''; $('cam').click(); };
+$('cam').addEventListener('change', function(e){
+  var f=e.target.files && e.target.files[0]; if(!f) return;
+  var b=$('btn-photo'); b.disabled=true; b.textContent='Leggo…';
+  decodePhoto(f).then(function(codes){
+    if(codes.length) addCodes(codes);
+    else showStatus('warn','Nessun codice trovato. Avvicinati, tieni il codice dritto e con buona luce, poi riprova.');
+  }).catch(function(){ showStatus('warn','Non riesco a leggere la foto. Riprova.'); })
+  .then(function(){ b.disabled=false; b.textContent='Foto'; });
+});
+
+/* ---------- Excel ---------- */
+$('btn-xlsx').onclick=function(){
+  if(!scans.length){ showStatus('warn','Non c\'è niente da salvare: questa versione è vuota.'); return; }
+  if(!window.XLSX){ showStatus('warn','Il generatore Excel non si è caricato: controlla la connessione e riapri la pagina.'); return; }
+  var ymd=state.date.split('-').map(Number);
+  var aoa=[['Valido dal','StoreID','EAN','Area','Esposizione']];
+  scans.forEach(function(s){ aoa.push([new Date(ymd[0],ymd[1]-1,ymd[2]), s.store, String(s.ean), s.area, s.expo]); });
+  var ws=XLSX.utils.aoa_to_sheet(aoa,{cellDates:true});
+  for(var r=1;r<aoa.length;r++){
+    var a=XLSX.utils.encode_cell({r:r,c:0}); if(ws[a]) ws[a].z='dd/mm/yyyy';
+    ws[XLSX.utils.encode_cell({r:r,c:2})]={t:'s',v:String(aoa[r][2])};
+  }
+  ws['!cols']=[{wch:12},{wch:8},{wch:16},{wch:6},{wch:14}];
+  var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Planogramma');
+  var buf=XLSX.write(wb,{bookType:'xlsx', type:'array'});
+  var name='Planogramma_'+state.store+'_'+state.date+'.xlsx';
+  var type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  var file; try{ file=new File([buf], name, {type:type}); }catch(e){ file=null; }
+  if(file && navigator.canShare && navigator.canShare({files:[file]})){
+    navigator.share({files:[file], title:name}).then(function(){ showStatus('ok','File '+name+' pronto ('+scans.length+' righe).'); })
+      .catch(function(err){ if(!err || err.name!=='AbortError') downloadBlob(new Blob([buf],{type:type}), name); });
+  } else downloadBlob(new Blob([buf],{type:type}), name);
+};
+function downloadBlob(blob, name){
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+  showStatus('ok','File '+name+' scaricato ('+scans.length+' righe).');
+}
+
+/* ---------- elimina versione ---------- */
+function renderDanger(confirming){
+  var z=$('danger-zone');
+  if(!confirming){ z.innerHTML='<button class="ghost danger" id="btn-delver">Elimina questa versione</button>'; $('btn-delver').onclick=function(){ renderDanger(true); }; return; }
+  z.innerHTML='<div class="msg warn"><span>Elimino tutte le '+scans.length+' scansioni di '+esc(state.store)+' del '+itDate(state.date)+'? Salva prima l\'Excel se ti serve.</span></div>'+
+    '<div class="row" style="margin-top:8px"><button class="danger" id="del-yes">Sì, elimina</button><button id="del-no">No</button></div>';
+  $('del-no').onclick=function(){ renderDanger(false); };
+  $('del-yes').onclick=function(){
+    try{ localStorage.removeItem('planogramma:scans:'+versionKey()); }catch(e){}
+    ls.set('planogramma:versions', getVersions().filter(function(v){ return v.key!==versionKey(); }));
+    scans=[]; render(); renderVersions(); renderDanger(false); showStatus('ok','Versione eliminata.');
+  };
+}
+
+/* ---------- avvio ---------- */
+$('in-store').value=state.store; $('in-date').value=state.date;
+drawContours(); render(); renderVersions(); renderDanger(false);
+try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}
+if('serviceWorker' in navigator && location.protocol==='https:'){ navigator.serviceWorker.register('sw.js',{scope:'./'}).catch(function(){}); }
+})();
+</script>
+</body>
+</html>
