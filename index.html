@@ -204,7 +204,7 @@ input{border:1px solid var(--line);background:var(--surface-2);border-radius:2px
 
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/barcode-detector@3.2.1/dist/iife/ponyfill.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/zxing-wasm@3.1.1/dist/iife/reader/index.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 (function(){
@@ -307,39 +307,64 @@ function addCodes(codes){
   else showStatus('ok',(codes.length>1?codes.length+' codici aggiunti':'Aggiunto '+codes[0])+' su '+where+'.', ids);
 }
 
-/* ---------- lettore ----------
-   Motore nativo del telefono se c'è (Android/Chrome), altrimenti ZXing-C++ (iPhone).
-   Caricato all'apertura della pagina, così la prima lettura non aspetta il download. */
-var FORMATS=['ean_13','ean_8','upc_a','upc_e'];
-var detector=null, detectorReady=null, engineName='';
+/* ---------- lettore: ZXing-C++ (WebAssembly), uguale su iPhone e Android ----------
+   Legge EAN-13/8, UPC e Code 128 numerico (alcune etichette stampate in negozio usano Code 128 con l'EAN dentro).
+   Ogni fotogramma alterna: riquadro normale, riquadro "ripulito" (media verticale che ricompone le barre
+   stampate male/sbiadite), ogni tanto l'immagine intera. Caricato all'apertura della pagina. */
+var ZX_OPTS={formats:['EAN13','EAN8','UPCA','UPCE','Code128'], tryHarder:true, maxNumberOfSymbols:2};
+var engineReady=null, engineName='ZXing-C++';
 function initDetector(){
-  if(detectorReady) return detectorReady;
-  detectorReady = (function(){
-    var N=window.BarcodeDetector;
-    if(N && N.getSupportedFormats){
-      return N.getSupportedFormats().then(function(sup){
-        var f=FORMATS.filter(function(x){ return sup.indexOf(x)>=0; });
-        if(f.length>=2){ engineName='nativo'; return new N({formats:f}); }
-        return null;
-      }).catch(function(){ return null; });
-    }
-    return Promise.resolve(null);
-  })().then(function(d){
-    if(!d && window.BarcodeDetectionAPI){ engineName='ZXing-C++'; d=new BarcodeDetectionAPI.BarcodeDetector({formats:FORMATS}); }
-    detector=d;
-    if(!d) return null;
-    var c=document.createElement('canvas'); c.width=c.height=32;          // lettura a vuoto: scarica e avvia il motore subito
-    var x=c.getContext('2d'); x.fillStyle='#fff'; x.fillRect(0,0,32,32);
-    return d.detect(c).catch(function(){}).then(function(){ return d; });
-  }).catch(function(){ detectorReady=null; return null; });
-  return detectorReady;
+  if(engineReady) return engineReady;
+  if(!window.ZXingWASM) return Promise.resolve(null);
+  engineReady = ZXingWASM.readBarcodes(new ImageData(32,32), ZX_OPTS)   // lettura a vuoto: scarica e avvia il motore subito
+    .then(function(){ return true; }).catch(function(){ engineReady=null; return null; });
+  return engineReady;
 }
-function getDetector(){ return detector; }
+function cleanCode(z){
+  var t=String(z.text||'');
+  if(z.format==='Code128'){ if(!/^\d{8}$|^\d{12,14}$/.test(t)) return null; if(t.length===14 && t.charAt(0)==='0') t=t.slice(1); }
+  var c=normalize(t); return checkOk(c) ? c : null;
+}
+function zxRead(id){
+  return ZXingWASM.readBarcodes(id, ZX_OPTS).then(function(r){
+    var out=[]; r.forEach(function(z){ if(!z.isValid) return; var c=cleanCode(z); if(c && out.indexOf(c)<0) out.push(c); }); return out;
+  }).catch(function(){ return []; });
+}
+/* grigio + media verticale (K pixel) + contrasto: unisce i puntini delle barre stampate male */
+function smooth(id, K){
+  var w=id.width, h=id.height, d=id.data, g=new Float32Array(w*h), o=new Float32Array(w*h), r=K>>1, i, x, y;
+  for(i=0;i<w*h;i++) g[i]=d[4*i]*0.3+d[4*i+1]*0.59+d[4*i+2]*0.11;
+  for(x=0;x<w;x++){ var s=0, n=0;
+    for(y=-r;y<h+r;y++){ if(y+r<h){ s+=g[(y+r)*w+x]; n++; } if(y-r-1>=0){ s-=g[(y-r-1)*w+x]; n--; } if(y>=0&&y<h) o[y*w+x]=s/n; } }
+  var lo=255, hi=0; for(i=0;i<w*h;i++){ if(o[i]<lo) lo=o[i]; if(o[i]>hi) hi=o[i]; }
+  var k=255/Math.max(1,hi-lo); for(i=0;i<w*h;i++){ var t=(o[i]-lo)*k; d[4*i]=d[4*i+1]=d[4*i+2]=t; }
+  return id;
+}
+var pc=document.createElement('canvas'), px=pc.getContext('2d',{willReadFrequently:true});
+function imageOf(src, sx, sy, sw, sh, W){
+  var k=Math.min(1, W/sw), w=Math.max(1,Math.round(sw*k)), h=Math.max(1,Math.round(sh*k));
+  if(pc.width!==w || pc.height!==h){ pc.width=w; pc.height=h; }
+  px.drawImage(src, sx, sy, sw, sh, 0, 0, w, h);
+  return px.getImageData(0, 0, w, h);
+}
+/* foto: prima intera; se non trova nulla, strisce orizzontali ripulite (vale solo un codice trovato in almeno 2 strisce) */
+async function decodeBitmap(bmp){
+  if(!(await initDetector())) return [];
+  var W=bmp.width, H=bmp.height, r, S, f;
+  for(S of [1600, 1000]){ r=await zxRead(imageOf(bmp, 0, 0, W, H, S)); if(r.length) return r; }
+  var votes={};
+  for(S of [900, 1300]) for(f=0; f<=0.85; f+=0.075){
+    var y=Math.round(H*f), h=Math.min(Math.round(H*0.15), H-y); if(h<20) continue;
+    (await zxRead(smooth(imageOf(bmp, 0, y, W, h, S), 15))).forEach(function(c){ votes[c]=(votes[c]||0)+1; });
+  }
+  return Object.keys(votes).filter(function(c){ return votes[c]>=2; });
+}
+function decodePhoto(file){ return createImageBitmap(file).then(decodeBitmap); }
 
 var stream=null, running=false, busy=false, timer=null, tick=0, wakeLock=null;
 var pending={}, lastSeen={}, boxTimer=null, lastHit=0, lastHint=0;
-var NEED_READS=2, READ_WINDOW=700, GAP_HOLD=1200, TICK_MS=70, CROP_W=1100, FULL_W=960, FULL_EVERY=5;
-var cv=document.createElement('canvas'), cx=cv.getContext('2d',{willReadFrequently:true});
+var NEED_READS=2, READ_WINDOW=700, GAP_HOLD=1200, TICK_MS=70, CROP_W=1100, SMOOTH_W=800, FULL_W=960;
+var MODES=['plain','smooth','plain','smooth','full'];
 var geo=null;   // zona del riquadro nel video, ricalcolata solo quando cambia lo schermo
 
 function flash(cls){ var b=$('box'); b.className='box '+cls; clearTimeout(boxTimer); boxTimer=setTimeout(function(){ b.className='box'; }, cls==='ok'?450:250); }
@@ -363,27 +388,26 @@ function measure(){
   var sw=Math.min(vw-sx, bx.width/scale), sh=Math.min(vh-sy, bx.height/scale);
   return {vw:vw, vh:vh, sx:sx, sy:sy, sw:sw, sh:sh};
 }
-function grab(full){
+function grab(mode){
   var v=$('video');
   if(!geo || geo.vw!==v.videoWidth || geo.vh!==v.videoHeight) geo=measure();
-  if(!geo) return false;
-  var r = full ? {sx:0, sy:0, sw:geo.vw, sh:geo.vh} : geo;
-  var k=Math.min(1, (full?FULL_W:CROP_W)/r.sw), w=Math.round(r.sw*k), h=Math.round(r.sh*k);
-  if(cv.width!==w || cv.height!==h){ cv.width=w; cv.height=h; }
-  cx.drawImage(v, r.sx, r.sy, r.sw, r.sh, 0, 0, w, h);
-  return true;
+  if(!geo) return null;
+  if(mode==='full') return imageOf(v, 0, 0, geo.vw, geo.vh, FULL_W);
+  if(mode==='smooth') return smooth(imageOf(v, geo.sx, geo.sy, geo.sw, geo.sh, SMOOTH_W), 15);
+  return imageOf(v, geo.sx, geo.sy, geo.sw, geo.sh, CROP_W);
 }
 window.addEventListener('resize', function(){ geo=null; });
 window.addEventListener('orientationchange', function(){ geo=null; });
 
 function loop(){
   if(!running) return;
-  var t0=performance.now(), det=getDetector();
+  var t0=performance.now();
   tick++;
-  if(!det || !grab(tick%FULL_EVERY===0)){ timer=setTimeout(loop, 120); return; }
-  det.detect(cv).then(function(res){
+  var id=grab(MODES[tick%MODES.length]);
+  if(!id){ timer=setTimeout(loop, 120); return; }
+  zxRead(id).then(function(codes){
     var t=performance.now();
-    for(var i=0;i<res.length;i++){ if(onRead(normalize(res[i].rawValue), t)) break; }
+    for(var i=0;i<codes.length;i++){ if(onRead(codes[i], t)) break; }
   }).catch(function(){}).then(function(){
     if(!running) return;
     var now=performance.now();
@@ -422,22 +446,6 @@ function stopScan(){
 }
 document.addEventListener('visibilitychange', function(){ if(document.hidden && running) stopScan(); });
 initDetector();
-
-function decodePhoto(file){
-  return initDetector().then(function(det){
-    if(!det) return [];
-  return createImageBitmap(file).then(function(bmp){
-    return det.detect(bmp).then(function(res){
-      if(res.length) return res;
-      var k=Math.min(1, 1600/Math.max(bmp.width,bmp.height)), c=document.createElement('canvas');
-      c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k); c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);
-      return det.detect(c);
-    });
-  }).then(function(res){
-    var out=[]; res.forEach(function(r){ var c=normalize(r.rawValue); if(out.indexOf(c)<0) out.push(c); }); return out;
-  });
-  });
-}
 
 /* ---------- disegno ---------- */
 function drawContours(){
